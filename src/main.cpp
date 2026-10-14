@@ -102,7 +102,7 @@ void setup() {
 
   setupDisplay();
 
-  xTaskCreatePinnedToCore(taskInput, "taskInput", 1024*3, NULL, 12, &taskHandleInput, 1);
+  xTaskCreatePinnedToCore(taskInput, "taskInput", 1024*3, NULL, 12, &taskHandleInput, 0);
 
   preSetup();
   setupPipeline();
@@ -133,8 +133,8 @@ void setup() {
 char qmsg[64] = "PLAYER:";
 
 void loop() {
-  vTaskDelay(1000);
-  Serial.println(bufferProcessed.levelPercent());
-  Serial.println(esp_get_free_internal_heap_size());
+  // vTaskDelay(1000);
+  // Serial.println(bufferProcessed.levelPercent());
+  // Serial.println(esp_get_free_internal_heap_size());
 }
 
