@@ -91,8 +91,8 @@ struct song {
     song() {}
     song(const std::string p) {
         path = p;
-        loadID3v1();
-        loadID3v2();
+        // loadID3v1();
+        // loadID3v2();
         // loadVBR();
     };
 
@@ -214,10 +214,10 @@ struct song {
             int decodeIndex = 1;
 
             if(header[0] == 'T') {
-                switch(frameData[0]) {
+                switch(frameData.data()[0]) {
                     case 0x00: {
                         //ISO-8859-1 (ASCII)
-                        Serial.println("case 0");
+                        // Serial.println("case 0");
                         Serial.println(std::min(frameSize, static_cast<int>(outputPtr->capacity())));
                         memcpy(outputPtr->data(), frameData.data() + 1, std::min(frameSize - 1, static_cast<int>(outputPtr->capacity())));
 
@@ -225,19 +225,14 @@ struct song {
                     }
                     case 0x01: {
                         //UTF16 with BOM
-                        Serial.println("case 1");
+                        // Serial.println("case 1");
                         utf16Decode = true;
 
-                        if(frameData.size() < 3) {
-                            file.seek(file.position() + (frameSize - frameBytesRead));
-                            continue;
-                        }
-
                         if(frameData.data()[1] == 0xFE && frameData.data()[2] == 0xFF) {
-                            Serial.println("manual select endian 1");
+                            // Serial.println("manual select endian 1");
                             decodeIndex += 2;
                         } else if(frameData.data()[1] == 0xFF && frameData.data()[2] == 0xFE) {
-                            Serial.println("manual select endian 2");
+                            // Serial.println("manual select endian 2");
                             bigEndian = false;
                             decodeIndex += 2;
                         }
@@ -246,13 +241,8 @@ struct song {
                     }
                     case 0x02: {
                         //UTF16BE without BOM
-                        Serial.println("case 2");
+                        // Serial.println("case 2");
                         utf16Decode = true;
-
-                        if(frameData.size() < 3) {
-                            file.seek(file.position() + (frameSize - frameBytesRead));
-                            continue;
-                        }
 
                         if((frameData.data()[1] == 0xFE && frameData.data()[2] == 0xFF) || (frameData.data()[1] == 0xFF && frameData.data()[2] == 0xFE)) {
                             decodeIndex += 2;
@@ -270,73 +260,75 @@ struct song {
                     default: {
                         break;
                     }
+                }
 
-                    if(utf16Decode) {
-                        //decode utf16 to utf8
-                        while(decodeIndex + 1 < frameSize) {
-                            uint32_t codepoint;
-                            uint16_t first16Unit; 
+                if(utf16Decode) {
 
+                    //decode utf16 to utf8
+                    while(decodeIndex + 1 < frameSize) {
+                        uint32_t codepoint;
+                        uint16_t first16Unit; 
+
+                        if(bigEndian) {
+                            first16Unit = (static_cast<uint8_t>(frameData.data()[decodeIndex]) << 8) | static_cast<uint8_t>(frameData.data()[decodeIndex + 1]); 
+                        } else {
+                            first16Unit = static_cast<uint8_t>(frameData.data()[decodeIndex]) | (static_cast<uint8_t>(frameData.data()[decodeIndex + 1]) << 8);
+                        }
+            
+                        // decode codepoint from utf16
+                        if(first16Unit >= 0xD800 && first16Unit <= 0xDBFF) {
+                            //high surrogate
+                            uint16_t second16Unit;
+
+                            if(decodeIndex + 3 > frameSize) {break;}
+
+                            // find low surrogate
                             if(bigEndian) {
-                                first16Unit = (static_cast<uint8_t>(frameData.data()[decodeIndex]) << 8) | static_cast<uint8_t>(frameData.data()[decodeIndex + 1]); 
+                                second16Unit = (static_cast<uint8_t>(frameData.data()[decodeIndex + 2]) << 8) | static_cast<uint8_t>(frameData.data()[decodeIndex + 3]); 
                             } else {
-                                first16Unit = static_cast<uint8_t>(frameData.data()[decodeIndex]) | (static_cast<uint8_t>(frameData.data()[decodeIndex + 1]) << 8);
+                                second16Unit = static_cast<uint8_t>(frameData.data()[decodeIndex + 2]) | (static_cast<uint8_t>(frameData.data()[decodeIndex + 3]) << 8);
                             }
-                
-                            // decode codepoint from utf16
-                            if(first16Unit >= 0xD800 && first16Unit <= 0xDBFF) {
-                                //high surrogate
-                                uint16_t second16Unit;
 
-                                if(decodeIndex + 3 > frameSize) {break;}
-
-                                // find low surrogate
-                                if(bigEndian) {
-                                    second16Unit = (static_cast<uint8_t>(frameData.data()[decodeIndex + 2]) << 8) | static_cast<uint8_t>(frameData.data()[decodeIndex + 3]); 
-                                } else {
-                                    second16Unit = static_cast<uint8_t>(frameData.data()[decodeIndex + 2]) | (static_cast<uint8_t>(frameData.data()[decodeIndex + 3]) << 8);
-                                }
-
-                                if(second16Unit >= 0xDC00 && second16Unit <= 0xDFFF) {
-                                    codepoint = (((first16Unit - 0xD800) << 10) | (second16Unit - 0xDC00)) + 0x10000;
-                                    decodeIndex += 4;
-                                } else {
-                                    break;
-                                }
-                    
+                            if(second16Unit >= 0xDC00 && second16Unit <= 0xDFFF) {
+                                codepoint = (((first16Unit - 0xD800) << 10) | (second16Unit - 0xDC00)) + 0x10000;
+                                decodeIndex += 4;
                             } else {
-                                // one 16bit character
-                                codepoint = first16Unit;
-
-                                decodeIndex += 2;
-                            } 
-
-                            // encode codepoint to utf
-
-                            if(codepoint < 128 && (outputPtr->size() < outputPtr->capacity()) ) {
-                                // 1 byte
-                                outputPtr->push_back(static_cast<char>(codepoint));
-                            } else if(codepoint < 2048 && (outputPtr->size() + 1 < outputPtr->capacity()) ) {
-                                // 2 bytes
-                                outputPtr->push_back(static_cast<char>( 0xC0 | (codepoint >> 6) ));
-                                outputPtr->push_back(static_cast<char>( 0x80 | (codepoint & 0x3F) ));
-                            } else if(codepoint < 65536 && (outputPtr->size() + 2 < outputPtr->capacity())) {
-                                // 3 bytes
-                                outputPtr->push_back(static_cast<char>( 0xE0 | (codepoint >> 12) ));
-                                outputPtr->push_back(static_cast<char>( 0x80 | ((codepoint >> 6) & 0x3F ) ));
-                                outputPtr->push_back(static_cast<char>( 0x80 | (codepoint & 0x3F) ));
-                            } else if((outputPtr->size() + 3 < outputPtr->capacity())) {
-                                outputPtr->push_back(static_cast<char>( 0xF0 | (codepoint >> 18) ));
-                                outputPtr->push_back(static_cast<char>( 0x80 | ((codepoint >> 12) & 0x3F ) ));
-                                outputPtr->push_back(static_cast<char>( 0x80 | ((codepoint >> 6) & 0x3F ) ));
-                                outputPtr->push_back(static_cast<char>( 0x80 | (codepoint & 0x3F) ));
-                            } else {
-                                Serial.println("dont fit");
                                 break;
                             }
+                
+                        } else {
+                            // one 16bit character
+                            codepoint = first16Unit;
+
+                            decodeIndex += 2;
+                        } 
+
+                        // encode codepoint to utf
+
+                        if(codepoint < 128 && (outputPtr->size() < outputPtr->capacity()) ) {
+                            // 1 byte
+                            outputPtr->push_back(static_cast<char>(codepoint));
+                        } else if(codepoint < 2048 && (outputPtr->size() + 1 < outputPtr->capacity()) ) {
+                            // 2 bytes
+                            outputPtr->push_back(static_cast<char>( 0xC0 | (codepoint >> 6) ));
+                            outputPtr->push_back(static_cast<char>( 0x80 | (codepoint & 0x3F) ));
+                        } else if(codepoint < 65536 && (outputPtr->size() + 2 < outputPtr->capacity())) {
+                            // 3 bytes
+                            outputPtr->push_back(static_cast<char>( 0xE0 | (codepoint >> 12) ));
+                            outputPtr->push_back(static_cast<char>( 0x80 | ((codepoint >> 6) & 0x3F ) ));
+                            outputPtr->push_back(static_cast<char>( 0x80 | (codepoint & 0x3F) ));
+                        } else if((outputPtr->size() + 3 < outputPtr->capacity())) {
+                            outputPtr->push_back(static_cast<char>( 0xF0 | (codepoint >> 18) ));
+                            outputPtr->push_back(static_cast<char>( 0x80 | ((codepoint >> 12) & 0x3F ) ));
+                            outputPtr->push_back(static_cast<char>( 0x80 | ((codepoint >> 6) & 0x3F ) ));
+                            outputPtr->push_back(static_cast<char>( 0x80 | (codepoint & 0x3F) ));
+                        } else {
+                            Serial.println("dont fit");
+                            break;
                         }
                     }
                 }
+                
             } else if(memcmp(header, "APIC", 4) == 0) {
 
             }

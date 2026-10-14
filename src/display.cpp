@@ -92,21 +92,21 @@ void taskDisplay(void *param) {
                 } while (display.nextPage());
             } else if(strcmp(msg, "BOB") == 0) {
                 Serial.println("messaged bob recieved");
-                Serial.println(currentSong.id3v2.TIT2.size());
+                // Serial.println(currentSong.id3v2.TIT2.data());
                 // for(int i = 0; i < currentSong.id3v2.TIT2.size(); i++) {
                 //     Serial.println(currentSong.id3v2.TIT2.at(i), 2);
                 // }
                 display.setFullWindow();
                 u8g2.setCursor(0, 10);
-                // display.firstPage();
-                // do {
-                //     display.fillScreen(colorBack);
-                //     u8g2.println(currentSong.id3v2.TIT2.data());
-                //     u8g2.println(currentSong.id3v2.TPE1.data());
-                //     u8g2.println(currentSong.id3v2.TALB.data());
-                //     u8g2.println(currentSong.id3v2.TRCK.data());
-                //     u8g2.println(currentSong.id3v2.TYER.data());
-                // } while(display.nextPage());
+                display.firstPage();
+                do {
+                    display.fillScreen(colorBack);
+                    u8g2.println(currentSong.id3v2.TIT2.data());
+                    u8g2.println(currentSong.id3v2.TPE1.data());
+                    u8g2.println(currentSong.id3v2.TALB.data());
+                    u8g2.println(currentSong.id3v2.TRCK.data());
+                    u8g2.println(currentSong.id3v2.TYER.data());
+                } while(display.nextPage());
                 
             }
 
